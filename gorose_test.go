@@ -2,47 +2,46 @@ package gorose
 
 import (
 	"fmt"
-	"github.com/gohouse/gorose/across"
-	"testing"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestGorose_Open(test *testing.T) {
-	conn, err = InitConn()
+func initDB() *Engin {
+	e, err := Open(&Config{Driver: "sqlite3", Dsn: "./db.sqlite"})
+
 	if err != nil {
-		test.Error("FAIL: open failed.", err)
+		panic(err.Error())
+	}
+
+	e.TagName("orm")
+	e.IgnoreName("ignore")
+
+	initTable(e)
+
+	return e
+}
+
+func initTable(e *Engin) {
+	var sql = `CREATE TABLE IF NOT EXISTS "users" (
+	 "uid" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	 "name" TEXT NOT NULL default "",
+	 "age" integer NOT NULL default 0
+)`
+	var s = e.NewSession()
+	var err error
+	var aff int64
+
+	aff, err = s.Execute(sql)
+	if err != nil {
+		return
+	}
+	if aff == 0 {
 		return
 	}
 
-	test.Log(fmt.Sprintf("PASS: open: %v", conn.Db.MasterDb))
-}
-
-func TestGorose_Open_Struct(test *testing.T) {
-	conn,err = Open(&DbConfigSingle{
-		Driver:          "mysql",                                                   // 驱动: mysql/sqlite/oracle/mssql/postgres
-		EnableQueryLog:  false,                                                     // 是否开启sql日志
-		SetMaxOpenConns: 0,                                                         // (连接池)最大打开的连接数，默认值为0表示不限制
-		SetMaxIdleConns: 0,                                                         // (连接池)闲置的连接数
-		Prefix:          "",                                                        // 表前缀
-		Dsn:             "gcore:gcore@tcp(192.168.200.248:3306)/test?charset=utf8", // 数据库链接
-	})
+	aff, err = s.Execute("insert into users(name,age) VALUES(?,?),(?,?),(?,?)",
+		"fizz", 18, "gorose", 19, "fizzday", 20)
 	if err != nil {
-		test.Error("FAIL: open failed.", err)
-		return
+		panic(err.Error())
 	}
-
-	test.Log(fmt.Sprintf("PASS: open: %v", conn.Db.MasterDb))
-}
-
-func TestGorose_Open_Json(test *testing.T) {
-	conn,err = Open("json", across.DemoParserFiles["json"])
-	if err != nil {
-		test.Error("FAIL: open failed.", err)
-		return
-	}
-
-	test.Log(fmt.Sprintf("PASS: open: %v", conn.Db.MasterDb))
-}
-
-func TestGorose_Version(test *testing.T) {
-	test.Log(fmt.Sprintf("PASS: %v", VERSION))
+	fmt.Println("初始化数据和表成功:", aff)
 }

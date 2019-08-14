@@ -1,6 +1,7 @@
 # GoRose ORM
 [![GoDoc](https://godoc.org/github.com/gohouse/gorose?status.svg)](https://godoc.org/github.com/gohouse/gorose)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gohouse/gorose)](https://goreportcard.com/report/github.com/gohouse/gorose)
+[![GitHub release](https://img.shields.io/github/release/gohouse/gorose.svg)](https://github.com/gohouse/gorose/releases/latest)
 [![Gitter](https://badges.gitter.im/gohouse/gorose.svg)](https://gitter.im/gorose/wechat)
 <a target="_blank" href="https://jq.qq.com/?_wv=1027&k=5JJOG9E">
 <img border="0" src="http://pub.idqqimg.com/wpa/images/group.png" alt="gorose-orm" title="gorose-orm"></a>
@@ -13,187 +14,339 @@
 |  |__| | |  `--'  | |  |\  \----.|  `--'  | .----)   |   |  |____ 
  \______|  \______/  | _| `._____| \______/  |_______/    |_______|
 ```
-### [中文-readme](https://github.com/gohouse/gorose/blob/master/README_zh-cn.md) | [english-readme](https://github.com/gohouse/gorose/blob/master/README.md)
 
-### What is GoRose?
+## translations  
+[English readme](https://github.com/gohouse/gorose/blob/master/README.md) |
+[中文 readme](https://github.com/gohouse/gorose/blob/master/README_cn.md) 
 
-GoRose, a mini database ORM for golang, which inspired by the famous php framwork laravel's eloquent. It will be friendly for php developers and python or ruby developers.  
-Currently provides five major database drivers:   
-- **mysql** : <https://github.com/go-sql-driver/mysql>  
-- **sqlite3** : <https://github.com/mattn/go-sqlite3>  
-- **postgres** : <https://github.com/lib/pq>  
-- **oracle** : <https://github.com/mattn/go-oci8>  
-- **mssql** : <https://github.com/denisenkom/go-mssqldb>  
+## introduction
+gorose is a golang orm framework, which is Inspired by laravel's eloquent.  
+Gorose 2.0 adopts modular architecture, communicates through the API of interface, and strictly relies on the lower layer. Each module can be disassembled, and even can be customized to its preferred appearance.  
+The module diagram is as follows:   
+![gorose.2.0.jpg](https://i.loli.net/2019/08/06/7R2GlbwUiFKOrNP.jpg)
 
-### 1.0.0 update notes
-- struct support  
-- seperation of write & read cluster  
-- New architecture  
+## installation
+- go.mod
+```bash
+require github.com/gohouse/gorose v2.0.1
+```
 
+- docker
+```bash
+docker run -it --rm ababy/gorose sh -c "go run main.go"
+```
+> docker image: [ababy/gorose](https://cloud.docker.com/u/ababy/repository/docker/ababy/gorose), The docker image contains the packages and runtime environment necessary for gorose, [view `Dockerfile`](https://github.com/docker-box/gorose/blob/master/master/golang/Dockerfile)   
 
-### Documentation
+## document
+[2.x doc](https://www.kancloud.cn/fizz/gorose-2/1135835)  
+[1.x doc](https://www.kancloud.cn/fizz/gorose/769179)  
+[0.x doc](https://gohouse.github.io/gorose/dist/en/index.html)
 
-[latest document](https://www.kancloud.cn/fizz/gorose) | [最新中文文档](https://www.kancloud.cn/fizz/gorose)  
-[0.x version english document](https://gohouse.github.io/gorose/dist/en/index.html) | [0.x版本中文文档](https://gohouse.github.io/gorose/dist/zh-cn/index.html)  
-[github](https://github.com/gohouse/gorose)  
-
-### Quick Preview
-
+## api preview
 ```go
-type users struct {
-	Name string
-	Age int `orm:"age"`
+db.Table().Fields().Where().GroupBy().Having().OrderBy().Limit().Select()
+db.Table().Data().Insert()
+db.Table().Data().Where().Update()
+db.Table().Where().Delete()
+```
+
+## usage advise
+Gorose provides data object binding (map, struct), while supporting string table names and map data return. It provides great flexibility.
+
+It is suggested that data binding should be used as a priority to complete query operation, so that the type of data source can be controlled.
+Gorose provides default `gorose. Map'and `gorose. Data' types to facilitate initialization of bindings and data
+
+## Configuration and link initialization
+Simple configuration
+```go
+var configSimple = &gorose.Config{
+	Driver: "sqlite3", 
+	Dsn: "./db.sqlite",
 }
-
-// select * from users where id=1 limit 1
-var user users      // a row data
-var users []users   // several rows
-// use struct
-db.Table(&user).Select()
-db.Table(&users).Where("id",1).Limit(10).Select()
-// use string instead of struct
-db.Table("users").Where("id",1).First()
-
-// select id as uid,name,age from users where id=1 order by id desc limit 10
-db.Table(&user).Where("id",1).Fields("id as uid,name,age").Order("id desc").Limit(10).Get()
-
-// query string
-db.Query("select * from user limit 10")
-db.Execute("update users set name='fizzday' where id=?", 1)
 ```
-
-### Features
-
-- Chain Operation
-- Connection Pool
-- struct/string compatible
-- read/write separation cluster
-- process a lot of data into slices  
-- transaction easily  
-- friendly for extended (extend more builders or config parsers)  
-
-### Installation
-
-- standard:  
+More configurations, you can configure the cluster, or even configure different databases in a cluster at the same time. The database will randomly select the cluster database to complete the corresponding reading and writing operations, in which master is the writing database, slave is the reading database, you need to do master-slave replication, here only responsible for reading and writing.
 ```go
-go get -u github.com/gohouse/gorose
+var config = &gorose.ConfigCluster{
+	Master:       []&gorose.Config{}{configSimple}
+    Slave:        []&gorose.Config{}{configSimple}
+    Prefix:       "pre_",
+    Driver:       "sqlite3",
+}
+```
+Initial usage
+```go
+var engin *gorose.Engin
+engin, err := Open(config)
+
+if err != nil {
+    panic(err.Error())
+}
 ```
 
-### Base Usage
+## Native SQL operation (add, delete, check), session usage
+Create user tables of `users`
+```sql
+DROP TABLE IF EXISTS "users";
+CREATE TABLE "users" (
+	 "uid" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	 "name" TEXT NOT NULL,
+	 "age" integer NOT NULL
+);
+
+INSERT INTO "users" VALUES (1, 'gorose', 18);
+INSERT INTO "users" VALUES (2, 'goroom', 18);
+INSERT INTO "users" VALUES (3, 'fizzday', 18);
+```
+define table struct
+```go
+type Users struct {
+	Uid  int    `gorose:"uid"`
+	Name string `gorose:"name"`
+	Age  int    `gorose:"age"`
+}
+// Set the table name. If not, use struct's name by default
+func (u *Users) TableName() string {
+	return "users"
+}
+```
+Native query operation
+```go
+// Here is the structure object to be bound
+// If you don't define a structure, you can use map, map example directly
+// var u = gorose.Data{}
+// var u = gorose.Map{}  Both are possible.
+var u Users
+session := engin.NewSession()
+// Here Bind () is used to store results. If you use NewOrm () initialization, you can use NewOrm (). Table (). Query () directly.
+err := session.Bind(&u).Query("select * from users where uid=? limit 2", 1)
+fmt.Println(err)
+fmt.Println(u)
+fmt.Println(session.LastSql())
+```
+Native inesrt delete update
+```go
+session.Bind(&u).Query("insert into users(name,age) values(?,?)(?,?)", "gorose",18,"fizzday",19)
+session.Bind(&u).Query("update users set name=? where uid=?","gorose",1)
+session.Bind(&u).Query("delete from users where uid=?", 1)
+```
+## Object Relational Mapping, the Use of ORM  
+
+- 1. Basic Chain Usage  
+
+```go
+var u Users
+db := engin.NewOrm()
+err := db.Table(&u).Fields("name").AddFields("uid","age").Distinct().Where("uid",">",0).OrWhere("age",18).
+	Group("age").Having("age>1").OrderBy("uid desc").Limit(10).Offset(1).Select()
+```
+
+- 2. If you don't want to define struct and want to bind map results of a specified type, you can define map types, such as
+```go
+type user gorose.Map
+// Or the following type definitions can be parsed properly
+type user2 map[string]interface{}
+type users3 []user
+type users4 []map[string]string
+type users5 []gorose.Map
+type users6 []gorose.Data
+```
+Start using map binding
+```go
+db.Table(&user).Select()
+db.Table(&users4).Limit(5).Select()
+```
+> Note: If the slice data structure is not used, only one piece of data can be obtained.  
+
+---
+The gorose. Data used here is actually the `map [string] interface {}'type.
+
+And `gorose. Map'is actually a `t. MapString' type. Here comes a `t'package, a golang basic data type conversion package. See http://github.com/gohouse/t for more details.  
+
+
+- 3. laravel's `First()`,`Get()`, Used to return the result set   
+That is to say, you can even pass in the table name directly without passing in various bound structs and maps, and return two parameters, one is the `[] gorose. Map `result set, and the second is `error', which is considered simple and rude.
+
+Usage is to replace the `Select ()'method above with Get, First, but `Select ()' returns only one parameter.
+
+
+- 4. orm Select Update Insert Delete  
+```go
+db.Table(&user2).Limit(10.Select()
+db.Table(&user2).Where("uid", 1).Data(gorose.Data{"name","gorose"}).Update()
+db.Table(&user2).Data(gorose.Data{"name","gorose33"}).Insert()
+db.Table(&user2).Data([]gorose.Data{{"name","gorose33"},"name","gorose44"}).Insert()
+db.Table(&user2).Where("uid", 1).Delete()
+```
+
+## Final SQL constructor, builder constructs SQL of different databases
+Currently supports mysql, sqlite3, postgres, oracle, mssql, Clickhouse and other database drivers that conform to `database/sql` interface support  
+In this part, users are basically insensitive, sorted out, mainly for developers can freely add and modify related drivers to achieve personalized needs.  
+
+## binder, Data Binding Objects  
+This part is also user-insensitive, mainly for incoming binding object parsing and data binding, and also for personalized customization by developers.  
+
+## Modularization
+Gorose 2.0 is fully modular, each module encapsulates the interface api, calling between modules, through the interface, the upper layer depends on the lower layer
+
+- Main module  
+    - engin  
+    gorose Initialize the configuration module, which can be saved and reused globally  
+    - session  
+    Really operate the database underlying module, all operations, will eventually come here to obtain or modify data.   
+    - orm  
+    Object relational mapping module, all ORM operations, are done here    
+    - builder  
+    Building the ultimate execution SQL module, you can build any database sql, but to comply with the `database / SQL ` package interface  
+- sub module  
+    - driver  
+    The database driver module, which is dependent on engin and builder, does things according to the driver    
+    - binder  
+    Result Set Binding Module, where all returned result sets are located   
+
+The above main modules are relatively independent and can be customized and replaced individually, as long as the interface of the corresponding modules is realized.    
+
+## Best Practices
+sql
+```sql
+DROP TABLE IF EXISTS "users";
+CREATE TABLE "users" (
+	 "uid" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	 "name" TEXT NOT NULL,
+	 "age" integer NOT NULL
+);
+
+INSERT INTO "users" VALUES (1, 'gorose', 18);
+INSERT INTO "users" VALUES (2, 'goroom', 18);
+INSERT INTO "users" VALUES (3, 'fizzday', 18);
+```
+Actual Code
 ```go
 package main
 
 import (
-	"github.com/gohouse/gorose"
-	_ "github.com/gohouse/gorose/driver/mysql"
 	"fmt"
+	"github.com/gohouse/gorose"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Users struct {
-	Name string
-	Age  int `orm:"age"`
+    Uid int64 `gorose:"uid"`
+    Name string `gorose:"name"`
+    Age int64 `gorose:"age"`
+    Xxx interface{} `gorose:"-"` // This field is ignored in ORM
 }
 
-// DB Config.(Recommend to use configuration file to import)
-var dbConfig = &gorose.DbConfigSingle{
-    Driver:          "mysql", // driver: mysql/sqlite/oracle/mssql/postgres
-    EnableQueryLog:  true,    // if enable sql logs
-    SetMaxOpenConns: 0,       // connection pool of max Open connections, default zero
-    SetMaxIdleConns: 0,       // connection pool of max sleep connections
-    Prefix:          "",      // prefix of table
-    Dsn:             "root:root@tcp(localhost:3306)/test?charset=utf8", // db dsn
+func (u *Users) TableName() string {
+	return "users"
 }
 
+var err error
+var engin *gorose.Engin
+
+func init() {
+    // Global initialization and reuse of databases
+    // The engin here needs to be saved globally, using either global variables or singletons
+    // Configuration & gorose. Config {} is a single database configuration
+    // If you configure a read-write separation cluster, use & gorose. ConfigCluster {}
+	engin, err = gorose.Open(&gorose.Config{Driver: "sqlite3", Dsn: "./db.sqlite"})
+}
+func DB() gorose.IOrm {
+	return engin.NewOrm()
+}
 func main() {
-	connection, err := gorose.Open(dbConfig)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	// start a new session
-	session := connection.NewSession()
-	// get a row of data
-	var user Users
-	err2 := session.Table(&user).Select()
-	if err2 != nil {
-		fmt.Println(err2)
-		return
-	}
-	fmt.Println(session.LastSql)
-	fmt.Println(user)
+	// A variable DB is defined here to reuse the DB object, and you can use db. LastSql () to get the SQL that was executed last.
+	// If you don't reuse db, but use DB () directly, you create a new ORM object, which is brand new every time.
+	// So reusing DB must be within the current session cycle
+	db := DB()
 	
-	// get several rows of data
-	var users []Users
-	// use connection derictly instead of NewSession()
-	err3 := connection.Table(&users).Limit(3).Select()
-	if err3 != nil {
-		fmt.Println(err3)
-		return
+	// fetch a row
+	var u Users
+	// bind result to user{}
+	err = db.Table(&u).Fields("uid,name,age").Where("age",">",0).OrderBy("uid desc").Select()
+	if err!=nil {
+		fmt.Println(err)
 	}
-	fmt.Println(users)
+	fmt.Println(u, u.Name)
+	fmt.Println(db.LastSql())
+	
+	// fetch multi rows
+	// bind result to []Users, db and context condition parameters are reused here
+	// If you don't want to reuse, you can use DB() to open a new session, or db.Reset()
+	// db.Reset() only removes contextual parameter interference, does not change links, DB() will change links.
+	var u2 []Users
+	err = db.Limit(10).Offset(1).Select()
+	fmt.Println(u2)
+	
+	// count
+	var count int64
+	// Here reset clears the parameter interference of the upper query and can count all the data. If it is not clear, the condition is the condition of the upper query.
+	// At the same time, DB () can be called new, without interference.
+	count,err = db.Reset().Count()
+	// or
+	count, err = DB().Table(&u).Count()
+	fmt.Println(count, err)
 }
 ```
 
-For more usage, please read the Documentation.
+## Advanced Usage
 
-### Contribution
+- Chunk Data Fragmentation, Mass Data Batch Processing (Cumulative Processing)  
 
-- [Issues](https://github.com/gohouse/gorose/issues)
-- [Pull requests](https://github.com/gohouse/gorose/pulls)
+   ` When a large amount of data needs to be manipulated, the chunk method can be used if it is unreasonable to take it out at one time and then operate it again.  
+        The first parameter of chunk is the amount of data specified for a single operation. According to the volume of business, 100 or 1000 can be selected.  
+        The second parameter of chunk is a callback method for writing normal data processing logic  
+        The goal is to process large amounts of data senselessly  
+        The principle of implementation is that each operation automatically records the current operation position, and the next time the data is retrieved again, the data is retrieved from the current position.
+        `
+	```go
+	User := db.Table("users")
+	User.Fields("id, name").Where("id",">",2).Chunk(2, func(data []map[string]interface{}) {
+	    // for _,item := range data {
+	    // 	   fmt.Println(item)
+	    // }
+	    fmt.Println(data)
+	})
 
-### Contributors
+	// print result:  
+	// map[id:3 name:gorose]
+	// map[id:4 name:fizzday]
+	// map[id:5 name:fizz3]
+	// map[id:6 name:gohouse]
+	[map[id:3 name:gorose] map[name:fizzday id:4]]
+	[map[id:5 name:fizz3] map[id:6 name:gohouse]]
+	```
+    
+- Loop Data fragmentation, mass data batch processing (from scratch)   
 
-- `fizzday` : Initiator  
-- `wuyumin` : pursuing the open source standard  
-- `holdno`  : official website builder  
-- `LazyNeo` : bug fix and improve source code  
-- `dmhome`  : improve source code 
- 
-### release notes
+	` Similar to chunk method, the implementation principle is that every operation is to fetch data from the beginning.
+	Reason: When we change data, the result of the change may affect the result of our data taking as where condition, so we can use Loop.`
+    ```go
+	User := db.Table("users")
+	User.Fields("id, name").Where("id",">",2).Loop(2, func(data []map[string]interface{}) {
+	    // for _,item := range data {
+	    // 	   fmt.Println(item)
+	    // }
+	    // here run update / delete  
+	})
+	```
+    
+- where nested  
 
-> v1.0.4
-
-- add middleware support, add logger cors
-
-> v1.0.3
-
-- add version get by const: gorose.VERSION
-
-> v1.0.2
-
-- improve go mod's bug
-
-> 1.0.0
-
-- New architecture, struct support, seperation of write & read cluster  
-
-> 0.9.2  
-
-- new connection pack for supporting multi connection
-
-> 0.9.1  
-
-- replace the insert result lastInsertId with rowsAffected as default
-
-> 0.9.0  
-
-- new seperate db instance
-
-> 0.8.2  
-
-- improve config format, new config format support file config like json/toml etc.
-
-> 0.8.1
-
-- improve multi connection and nulti transation
-
-> 0.8.0  
-
-- add connection pool  
-- adjust dir for open source standard  
-- add glide version control  
-- translate for english and chinese docment  
-
-### License
-
-MIT
+	```go
+	// SELECT  * FROM users  
+	//     WHERE  id > 1 
+	//         and ( name = 'fizz' 
+	//             or ( name = 'fizz2' 
+	//                 and ( name = 'fizz3' or website like 'fizzday%')
+	//                 )
+	//             ) 
+	//     and job = 'it' LIMIT 1
+	User := db.Table("users")
+	User.Where("id", ">", 1).Where(func() {
+	        User.Where("name", "fizz").OrWhere(func() {
+	            User.Where("name", "fizz2").Where(func() {
+	                User.Where("name", "fizz3").OrWhere("website", "like", "fizzday%")
+	            })
+	        })
+	    }).Where("job", "it").First()
+	```
